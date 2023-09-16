@@ -1,0 +1,21 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SunLiang = void 0;
+const tslib_1 = require("tslib");
+const loader_skills_1 = require("core/game/package_loader/loader.skills");
+const character_1 = require("../character");
+const skillLoaderInstance = loader_skills_1.SkillLoader.getInstance();
+let SunLiang = class SunLiang extends character_1.Character {
+    constructor(id) {
+        super(id, 'sunliang', 0 /* Male */, 2 /* Wu */, 3, 3, "shadow" /* Shadow */, [
+            skillLoaderInstance.getSkillByName('kuizhu'),
+            ...skillLoaderInstance.getSkillsByName('chezheng'),
+            skillLoaderInstance.getSkillByName('lijun'),
+        ]);
+    }
+};
+SunLiang = tslib_1.__decorate([
+    character_1.Lord,
+    tslib_1.__metadata("design:paramtypes", [Number])
+], SunLiang);
+exports.SunLiang = SunLiang;

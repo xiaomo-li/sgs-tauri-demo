@@ -1,0 +1,105 @@
+import {
+  CardMoveReason,
+  GameEventIdentifiers,
+  ServerEventFinder,
+} from "../../../event/event";
+import { DamageType } from "../../../game/game_props";
+import { Player } from "../../../player/player";
+import { PlayerCardsArea, PlayerId } from "../../../player/player_props";
+import { Room } from "../../../room/room";
+import { MarkEnum } from "../../../shares/types/mark_list";
+import { ActiveSkill, LimitSkill } from "../../skill";
+
+@LimitSkill({ name: "zhanhuo", description: "zhanhuo_description" })
+export class ZhanHuo extends ActiveSkill {
+  public canUse(room: Room, owner: Player) {
+    return owner.getMark(MarkEnum.JunLve) > 0;
+  }
+
+  public cardFilter() {
+    return true;
+  }
+
+  public isAvailableCard() {
+    return false;
+  }
+
+  public numberOfTargets() {
+    return [];
+  }
+
+  public targetFilter(room: Room, owner: Player, targets: PlayerId[]) {
+    return (
+      targets.length <= owner.getMark(MarkEnum.JunLve) && targets.length > 0
+    );
+  }
+
+  public isAvailableTarget(owner: PlayerId, room: Room, target: PlayerId) {
+    return room.getPlayerById(target).ChainLocked === true;
+  }
+
+  public async onUse() {
+    return true;
+  }
+
+  public async onEffect(
+    room: Room,
+    skillUseEvent: ServerEventFinder<GameEventIdentifiers.SkillUseEvent>
+  ) {
+    const { fromId, toIds } = skillUseEvent;
+    const from = room.getPlayerById(fromId);
+
+    room.addMark(fromId, MarkEnum.JunLve, -from.getMark(MarkEnum.JunLve));
+
+    for (const targetId of toIds!) {
+      const target = room.getPlayerById(targetId);
+      const equips = target
+        .getCardIds(PlayerCardsArea.EquipArea)
+        .filter((id) => room.canDropCard(targetId, id));
+      if (equips.length > 0) {
+        await room.dropCards(
+          CardMoveReason.SelfDrop,
+          equips,
+          targetId,
+          targetId,
+          this.Name
+        );
+      }
+    }
+
+    const askForPlayerChoose: ServerEventFinder<GameEventIdentifiers.AskForChoosingPlayerEvent> =
+      {
+        toId: fromId,
+        players: toIds!,
+        requiredAmount: 1,
+        conversation:
+          "zhanhuo: please choose a target to whom you cause 1 fire damage",
+        triggeredBySkills: [this.Name],
+      };
+
+    room.notify(
+      GameEventIdentifiers.AskForChoosingPlayerEvent,
+      askForPlayerChoose,
+      fromId
+    );
+
+    const response = await room.onReceivingAsyncResponseFrom(
+      GameEventIdentifiers.AskForChoosingPlayerEvent,
+      fromId
+    );
+
+    const starter =
+      response.selectedPlayers === undefined
+        ? toIds![0]
+        : response.selectedPlayers[0];
+    await room.damage({
+      fromId,
+      toId: starter,
+      damage: 1,
+      damageType: DamageType.Fire,
+      triggeredBySkills: [this.Name],
+    });
+
+    return true;
+  }
+}

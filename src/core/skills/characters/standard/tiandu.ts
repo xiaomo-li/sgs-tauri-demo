@@ -1,0 +1,62 @@
+import {
+  CardMoveArea,
+  CardMoveReason,
+  GameEventIdentifiers,
+  ServerEventFinder,
+} from "../../../event/event";
+import { AllStage, JudgeEffectStage } from "../../../game/stage_processor";
+import { Player } from "../../../player/player";
+import { Room } from "../../../room/room";
+import { CommonSkill, TriggerSkill } from "../../skill";
+
+@CommonSkill({ name: "tiandu", description: "tiandu_description" })
+export class TianDu extends TriggerSkill {
+  public get RelatedCharacters() {
+    return ["xizhicai"];
+  }
+
+  isTriggerable(
+    event: ServerEventFinder<GameEventIdentifiers.JudgeEvent>,
+    stage?: AllStage
+  ) {
+    return stage === JudgeEffectStage.AfterJudgeEffect;
+  }
+
+  canUse(
+    room: Room,
+    owner: Player,
+    content: ServerEventFinder<GameEventIdentifiers.JudgeEvent>
+  ) {
+    return (
+      owner.Id === content.toId && room.isCardOnProcessing(content.judgeCardId)
+    );
+  }
+
+  async onTrigger(
+    room: Room,
+    skillUseEvent: ServerEventFinder<GameEventIdentifiers.SkillUseEvent>
+  ) {
+    return true;
+  }
+
+  async onEffect(
+    room: Room,
+    skillUseEvent: ServerEventFinder<GameEventIdentifiers.SkillEffectEvent>
+  ) {
+    const { triggeredOnEvent } = skillUseEvent;
+    const judgeEvent =
+      triggeredOnEvent as ServerEventFinder<GameEventIdentifiers.JudgeEvent>;
+    await room.moveCards({
+      movingCards: [
+        { card: judgeEvent.judgeCardId, fromArea: CardMoveArea.ProcessingArea },
+      ],
+      toArea: CardMoveArea.HandArea,
+      toId: skillUseEvent.fromId,
+      moveReason: CardMoveReason.ActivePrey,
+      proposer: skillUseEvent.fromId,
+      movedByReason: this.GeneralName,
+    });
+
+    return true;
+  }
+}

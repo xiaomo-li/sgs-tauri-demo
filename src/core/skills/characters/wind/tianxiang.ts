@@ -1,0 +1,137 @@
+import { Card, VirtualCard } from "../../../cards/card";
+import { CardId, CardSuit } from "../../../cards/libs/card_props";
+import {
+  CardMoveArea,
+  CardMoveReason,
+  GameEventIdentifiers,
+  ServerEventFinder,
+} from "../../../event/event";
+import { EventPacker } from "../../../event/event_packer";
+import { Sanguosha } from "../../../game/engine";
+import { DamageType } from "../../../game/game_props";
+import { AllStage, DamageEffectStage } from "../../../game/stage_processor";
+import { Player } from "../../../player/player";
+import { PlayerCardsArea, PlayerId } from "../../../player/player_props";
+import { Room } from "../../../room/room";
+import { CommonSkill, TriggerSkill } from "../../skill";
+
+@CommonSkill({ name: "tianxiang", description: "tianxiang_description" })
+export class TianXiang extends TriggerSkill {
+  isTriggerable(
+    event: ServerEventFinder<GameEventIdentifiers.DamageEvent>,
+    stage?: AllStage
+  ) {
+    return stage === DamageEffectStage.DamagedEffect;
+  }
+
+  canUse(
+    room: Room,
+    owner: Player,
+    content: ServerEventFinder<GameEventIdentifiers.DamageEvent>
+  ) {
+    return (
+      owner.Id === content.toId &&
+      owner.getCardIds(PlayerCardsArea.HandArea).length > 0
+    );
+  }
+
+  isAvailableTarget(owner: PlayerId, room: Room, target: PlayerId) {
+    return owner !== target;
+  }
+
+  targetFilter(room: Room, owner: Player, targets: PlayerId[]): boolean {
+    return targets.length === 1;
+  }
+
+  isAvailableCard(owner: PlayerId, room: Room, cardId: CardId) {
+    return (
+      Sanguosha.getCardById(cardId).Suit === CardSuit.Heart &&
+      room.canDropCard(owner, cardId)
+    );
+  }
+
+  public availableCardAreas() {
+    return [PlayerCardsArea.HandArea, PlayerCardsArea.EquipArea];
+  }
+
+  cardFilter(room: Room, owner: Player, cards: CardId[]): boolean {
+    return cards.length === 1;
+  }
+
+  async onTrigger() {
+    return true;
+  }
+
+  async onEffect(
+    room: Room,
+    skillUseEvent: ServerEventFinder<GameEventIdentifiers.SkillEffectEvent>
+  ) {
+    const { triggeredOnEvent, fromId, cardIds, toIds } = skillUseEvent;
+    await room.dropCards(
+      CardMoveReason.SelfDrop,
+      cardIds!,
+      fromId,
+      fromId,
+      this.Name
+    );
+    const damageEvent =
+      triggeredOnEvent as ServerEventFinder<GameEventIdentifiers.DamageEvent>;
+    EventPacker.terminate(damageEvent);
+
+    const chooseOptions: ServerEventFinder<GameEventIdentifiers.AskForChoosingOptionsEvent> =
+      {
+        options: ["option-one", "option-two"],
+        toId: fromId,
+        conversation: "please choose tianxiang options",
+        triggeredBySkills: [this.Name],
+      };
+    room.notify(
+      GameEventIdentifiers.AskForChoosingOptionsEvent,
+      EventPacker.createUncancellableEvent<GameEventIdentifiers.AskForChoosingOptionsEvent>(
+        chooseOptions
+      ),
+      fromId
+    );
+    const response = await room.onReceivingAsyncResponseFrom(
+      GameEventIdentifiers.AskForChoosingOptionsEvent,
+      fromId
+    );
+    if (response.selectedOption === "option-one") {
+      await room.damage({
+        toId: toIds![0],
+        damage: 1,
+        damageType: DamageType.Normal,
+        triggeredBySkills: [this.Name],
+      });
+      const to = room.getPlayerById(toIds![0]);
+      await room.drawCards(
+        Math.min(to.LostHp, 5),
+        to.Id,
+        undefined,
+        undefined,
+        this.Name
+      );
+    } else {
+      await room.loseHp(toIds![0], 1);
+      let droppedCardIds = cardIds!;
+      if (Card.isVirtualCardId(droppedCardIds[0])) {
+        droppedCardIds = Sanguosha.getCardById<VirtualCard>(
+          droppedCardIds[0]
+        ).ActualCardIds;
+      }
+      for (const cardId of droppedCardIds) {
+        if (room.isCardInDropStack(cardId)) {
+          await room.moveCards({
+            movingCards: [{ card: cardId, fromArea: CardMoveArea.DropStack }],
+            toId: toIds![0],
+            toArea: CardMoveArea.HandArea,
+            moveReason: CardMoveReason.PassiveMove,
+            proposer: fromId,
+            movedByReason: this.Name,
+          });
+        }
+      }
+    }
+    return true;
+  }
+}

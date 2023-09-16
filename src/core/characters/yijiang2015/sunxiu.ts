@@ -1,0 +1,30 @@
+import { GameCharacterExtensions } from "../../game/game_props";
+import { SkillLoader } from "../../game/package_loader/loader.skills";
+import {
+  Character,
+  CharacterGender,
+  CharacterNationality,
+  Lord,
+} from "../character";
+
+const skillLoaderInstance = SkillLoader.getInstance();
+
+@Lord
+export class SunXiu extends Character {
+  constructor(id: number) {
+    super(
+      id,
+      "sunxiu",
+      CharacterGender.Male,
+      CharacterNationality.Wu,
+      3,
+      3,
+      GameCharacterExtensions.YiJiang2015,
+      [
+        skillLoaderInstance.getSkillByName("yanzhu"),
+        skillLoaderInstance.getSkillByName("xingxue"),
+        skillLoaderInstance.getSkillByName("zhaofu"),
+      ]
+    );
+  }
+}
